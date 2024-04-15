@@ -1,24 +1,55 @@
+import getopt
 import os
 import re
-# import pdfplumber
+import sys
 import openai
+from PyPDF2 import PdfReader
 from pinecone import Pinecone
-from langchain.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Initialize OpenAI
 
-MODEL = "text-embedding-ada-002"
-openAIKey = os.environ.get("OPENAI_API_KEY")
-openAIOrgId = os.environ.get("OPENAI_ORG_ID")
-pineconeKey = os.environ.get("PINECONE_API_KEY")
+def usage():
+    print('usage: upset.py -f <inputfile> -i <id>')
 
-#initialize AI client
-openAIClient = openai.OpenAI(api_key=openAIKey, organization=openAIOrgId)
 
-# Initialize Pinecone
-pineconeClient = Pinecone(api_key=pineconeKey, environment='gcp-starter')
-index = pineconeClient.Index("animals")
+def inputs(argv):
+    # Get the input values
+
+    fname = ''
+    id = ''
+
+    try:
+        opts, args = getopt.getopt(argv, "hf:i:", ["help", "file=", "id="])
+    except getopt.GetoptError:
+        print('usage: upset.py -h')
+        print('usage: upset.py -f <inputfile> -i <id>')
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            print('upset.py -f <inputfile> -i <id>')
+            sys.exit()
+        elif opt in ("-f", "--file"):
+            fname = arg
+        elif opt in ("-i", "--id"):
+            id = arg
+
+    print ('filename=', fname)
+    print ('id', id)
+
+    return fname, id
+
+def main(argv):
+    # file_path = "/Users/jkeeler/Documents/ai/animals/arctic-fox.pdf"
+    fname, id = inputs(argv)
+
+    # Process a PDF and create embeddings
+    texts = process_pdf(fname)
+
+    textToEmbedding = create_embeddings(texts)
+
+    # Upsert the embeddings to Pinecone
+    upsert_embeddings_to_pinecone(id, textToEmbedding, fname)
+    print ("Success")
 
 # Define a function to preprocess text
 def preprocess_text(text):
@@ -27,33 +58,50 @@ def preprocess_text(text):
     return text
 
 def process_pdf(file_path):
-    # create a loader
-    loader = PyPDFLoader(file_path)
-    # load your data
-    data = loader.load()
-    # Split your data up into smaller documents with Chunks
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
-    documents = text_splitter.split_documents(data)
-    # Convert Document objects into strings
-    texts = [str(doc) for doc in documents]
+    reader = PdfReader(file_path)
+    texts = []
+    for page in reader.pages:
+        text = page.extract_text()
+        texts.append(text)
     return texts
 
 # Define a function to create embeddings
 def create_embeddings(texts):
-    embeddings_list = []
+    # Initialize OpenAI
+    MODEL = "text-embedding-ada-002"
+    openAIKey = os.environ.get("OPENAI_API_KEY")
+    openAIOrgId = os.environ.get("OPENAI_ORG_ID")
+
+    # initialize AI client
+    openAIClient = openai.OpenAI(api_key=openAIKey, organization=openAIOrgId)
+    textToEmbedding = {}
+
     for text in texts:
-        res = openAIClient.embeddings.create(input=[text], model=MODEL)
-        embeddings_list.append(res['data'][0]['embedding'])
-    return embeddings_list
+        response = openAIClient.embeddings.create(
+            model=MODEL,
+            input=text
+        )
+        embedding = response.data[0].embedding
+        print(embedding)
+        textToEmbedding[text] = embedding
+    return textToEmbedding
 
 # Define a function to upsert embeddings to Pinecone
-def upsert_embeddings_to_pinecone(index, embeddings, ids):
-    index.upsert(vectors=[(id, embedding) for id, embedding in zip(ids, embeddings)])
+def upsert_embeddings_to_pinecone(id, textToEmbedding, filename):
+    # Initialize Pinecone
+    pineconeKey = os.environ.get("PINECONE_API_KEY")
+    pineconeClient = Pinecone(api_key=pineconeKey, environment='gcp-starter')
+    index = pineconeClient.Index("animals")
 
-# Process a PDF and create embeddings
-file_path = "/Users/jkeeler/Documents/ai/animals/arctic-fox.pdf"
-texts = process_pdf(file_path)
-embeddings = create_embeddings(texts)
+    for fileText, embedding in textToEmbedding.items():
+        print("upserting vector")
+        response = index.upsert(vectors=[
+                {
+                    'id':id,
+                    'values':embedding,
+                    'metadata':{'name':id, 'filename':filename, 'section':fileText}
+                }])
+        print(response)
 
-# Upsert the embeddings to Pinecone
-# upsert_embeddin`gs_to_pinecone(index, embeddings, [file_path])
+if __name__ == "__main__":
+   main(sys.argv[1:])
