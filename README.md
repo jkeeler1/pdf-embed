@@ -9,10 +9,11 @@ This was run with Python 3.12.2
 
 ### Usage
 
-`python upsert.py -f /Users/jkeeler/Documents/ai/animals/arctic-fox.pdf -i arctic-fox`
+`python upsert.py -f /Users/jkeeler/Documents/ai/animals/arctic-fox.pdf -i arctic-fox`-u https://seaworld.org/animals/facts/mammals/arctic-fox/
 where:
  -f is the pdf you wish to read
  -i is the id that should be associated with
+ -u is the url where you can find this information
 
 `python upsert.py -h for help`
 
@@ -22,6 +23,6 @@ Assumes you have set the following environment variables
 * OPENAI_API_KEY
 * OPENAI_ORG_ID
 
-#### Light Reading
+#### References
 https://pypi.org/project/pinecone-client/
 https://docs.pinecone.io/reference/api/data-plane/upsert

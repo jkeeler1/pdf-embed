@@ -9,13 +9,14 @@ from pinecone import Pinecone
 def main(argv):
     # file_path = "/Users/jkeeler/Documents/ai/animals/arctic-fox.pdf"
     # id = "arctic-fox
-    fname, id = inputs(argv)
+    # url = "https://seaworld.org/animals/facts/mammals/arctic-fox/"
+    fname, id, url = inputs(argv)
 
     # Break the pdf into chunks
     texts = process_pdf(fname)
 
     # Create the embeddings from the text chunks
-    embeddings = create_embeddings(id, fname, texts)
+    embeddings = create_embeddings(id, fname, url, texts)
 
     # Upsert the embeddings to Pinecone
     upsert_embeddings_to_pinecone(embeddings)
@@ -30,7 +31,7 @@ def process_pdf(file_path):
         texts.append(text)
     return texts
 
-def create_embeddings(id, filename, texts):
+def create_embeddings(id, filename, url, texts):
     # Initialize OpenAI
     MODEL = "text-embedding-ada-002"
     openAIKey = os.environ.get("OPENAI_API_KEY")
@@ -50,7 +51,7 @@ def create_embeddings(id, filename, texts):
         embedding = response.data[0].embedding
         # print(embedding)
         chunkId = id + "_" + str(index)
-        embeddings.append((chunkId, embedding, {'name': id, 'filename': file, 'chunk': text}))
+        embeddings.append((chunkId, embedding, {'name': id, 'filename': file, 'url': url, 'chunk': text}))
     return embeddings
 
 
@@ -87,27 +88,30 @@ def inputs(argv):
 
     fname: str = ''
     id: str = ''
+    url: str = ''
 
     try:
-        opts, args = getopt.getopt(argv, "hf:i:", ["help", "file=", "id="])
+        opts, args = getopt.getopt(argv, "hf:i:u:", ["help", "file=", "id=", "url="])
     except getopt.GetoptError:
         print('usage: upsert.py -h')
-        print('usage: upsert.py -f <inputfile> -i <id>')
+        print('usage: upsert.py -f <inputfile> -i <id> -u <url>')
         sys.exit(2)
 
     for opt, arg in opts:
         if opt in ("-h", "--help"):
-            print('upsert.py -f <inputfile> -i <id>')
+            print('upsert.py -f <inputfile> -i <id> -u <url>')
             sys.exit()
         elif opt in ("-f", "--file"):
             fname = arg
         elif opt in ("-i", "--id"):
             id = arg
+        elif opt in ("-u", "--url"):
+            url = arg
 
     print('filename=', fname)
     print('id', id)
-
-    return fname, id
+    print('url', url)
+    return fname, id, url
 
 
 if __name__ == "__main__":
